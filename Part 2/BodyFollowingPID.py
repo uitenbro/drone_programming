@@ -1,0 +1,104 @@
+from djitellopy import tello
+from cvzone.PoseModule import PoseDetector
+import cv2
+import cvzone
+
+hi, wi = 480, 640
+bodyAreaTarget = round(0.25*wi*hi) # 33% of the overall area
+
+#                   P   I  D
+xPID = cvzone.PID([0.22, 0, 0.15], wi // 2, limit=[-100,100])
+yPID = cvzone.PID([0.27, 0, 0.1], hi // 2, axis=1, limit=[-100,100])
+zPID = cvzone.PID([0.0006, 0.00000, 0.000015], bodyAreaTarget,limit=[-100,100])
+
+plotX = cvzone.LivePlot(yLimit=[-100, 100], char='X')
+plotY = cvzone.LivePlot(yLimit=[-100, 100], char='Y')
+plotZ = cvzone.LivePlot(yLimit=[-100, 100], char='Z')
+
+detector = PoseDetector(upBody=True)
+
+drone = tello.Tello()
+drone.connect()
+print(drone.get_battery())
+drone.streamoff()
+drone.streamon()
+
+
+# webcam = cv2.VideoCapture(0)
+# _, img = webcam.read()
+# img = cv2.resize(img, (wi, hi))
+# hi, wi, _ = img.shape
+
+while True:
+    # get image
+    img = drone.get_frame_read().frame
+    # _, img = webcam.read()
+    # resize then find face and draw bbox
+    img = cv2.resize(img, (wi, hi))
+    img = detector.findPose(img, draw = True)
+    landmarks, bbox = detector.findPosition(img, draw=True)
+    # draw center lines on image
+    cv2.line(img, pt1=(0,hi//2), pt2=(wi,hi//2), color=(255,0,255), thickness=2)
+    cv2.line(img, pt1=(wi//2,0), pt2=(wi//2,hi), color=(255,0,255), thickness=2)
+
+    # if a body was found
+    if bbox:
+        # extract center and area of bbox
+        cx, cy = bbox['center']
+        x,y,w,h = bbox['bbox']
+        area = w*h
+
+        # draw circle at center of upper body
+        cv2.circle(img, (cx, cy), 5, [255, 0, 255], thickness=2)
+        # draw line from center of upper body to center of view
+        cv2.line(img, (cx, cy), (wi // 2, hi // 2), (25, 0, 255), thickness=2)
+        # print the area of the upper body bbox in square-pixels
+        cv2.putText(img, str(round(area/(wi*hi)*100))+"%", (cx-w//2, cy-h//2-50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 255), 2)
+
+        # calculate error percents
+        # xErr = round(((cx-wi//2) / (wi//2)) * 50) # distance to center as percent of full distance
+        # yErr = round(((hi//2-cy) / (hi//2)) * 50) # distance to center as percent of full distance
+        # zErr = round(((0.02 - (area / (hi*wi))) / 0.2) * 100) # target 2.% of the total area
+        # if zErr < - 100:
+        #     zErr = - 100
+        # elif zErr > 25:
+        #     zErr = 25
+
+        # update PID controls based on current position
+        xVal = int(xPID.update(cx))
+        yVal = -int(yPID.update(cy))
+        zVal = -int(zPID.update(area))
+        wVal = xVal  # set left / right control equal to CCW / CW control
+
+    else:
+        # no face was found so zero out errors (forces stoppage of movement)
+        xVal = 0
+        yVal = 0
+        zval = 0
+        wVal = 0
+
+        # TODO: add movement to search for a face
+
+    # plot values
+    imgPlotX = plotX.update(xVal)
+    imgPlotY = plotY.update(yVal)
+    imgPlotZ = plotZ.update(zVal)
+
+    # combine images
+    imgStacked = cvzone.stackImages([img, imgPlotZ, imgPlotX, imgPlotY], 2, 0.75)
+    #cv2.imshow("drone view", img)
+    cv2.imshow("drone view", imgStacked)
+
+    # command the drone to move
+    drone.send_rc_control(wVal, zVal, yVal, xVal)
+
+    key = cv2.waitKey(5)
+    if key & 0xFF == ord('q'):
+        break
+    elif key & 0xFF == ord('t'):
+        drone.takeoff()
+
+print(drone.get_battery())
+cv2.destroyAllWindows()
+print(drone.get_battery())
+drone.end()
