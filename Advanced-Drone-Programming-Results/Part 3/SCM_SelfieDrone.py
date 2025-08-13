@@ -1,5 +1,8 @@
 from djitellopy import tello
 from cvzone.PoseModule import PoseDetector
+from cvzone.PIDModule import PID
+# from cvzone.LivePlotModule import LivePlot
+from liveplot import LivePlot
 import cv2
 import numpy as np
 import cvzone
@@ -49,7 +52,10 @@ print(drone.get_battery())
 drone.streamoff()
 drone.streamon()
 
-detector = PoseDetector(upBody=True)
+hi, wi = 480, 640
+
+detector = PoseDetector()
+
 # webcam = cv2.VideoCapture(0)
 # _, img = webcam.read()
 # img = cv2.resize(img, (wi, hi))
@@ -58,17 +64,16 @@ isFlying = False
 takingPhoto = False
 pauseTime = 0.0
 
-hi, wi = 480, 640
 bodyAreaTarget = round(0.25*wi*hi) # 33% of the overall area
 
 #                   P   I  D
-xPID = cvzone.PID([0.4, 0, 0.25], wi // 2, limit=[-100,100])
-yPID = cvzone.PID([0.27, 0, 0.1], hi // 2, axis=1, limit=[-100,100])
-zPID = cvzone.PID([0.0015, 0.00000, 0.000025], bodyAreaTarget,limit=[-100,100])
+xPID = PID([0.22, 0, 0.15], wi // 2, limit=[-100,100])
+yPID = PID([0.27, 0, 0.1], hi // 2, axis=1, limit=[-100,100])
+zPID = PID([0.0006, 0.00000, 0.000015], bodyAreaTarget,limit=[-100,100])
 
-plotX = cvzone.LivePlot(yLimit=[-100, 100], char='X')
-plotY = cvzone.LivePlot(yLimit=[-100, 100], char='Y')
-plotZ = cvzone.LivePlot(yLimit=[-100, 100], char='Z')
+plotX = LivePlot(yLimit=[-100, 100], char='X')
+plotY = LivePlot(yLimit=[-100, 100], char='Y')
+plotZ = LivePlot(yLimit=[-100, 100], char='Z')
 
 while True:
     # get image
@@ -87,13 +92,14 @@ while True:
     cv2.line(img, pt1=(wi//2,0), pt2=(wi//2,hi), color=(255,0,255), thickness=2)
 
     gesture = ""
-
     # if a body was found
     if bbox:
         # extract center and area of bbox
-        cx, cy = bbox['center']
+        # cx, cy = bbox['center']
         x,y,w,h = bbox['bbox']
-        area = w*h
+        cx = x + w // 2
+        cy = y + (h * 1 // 4)
+        area = (w*h) // 2
 
         # draw circle at center of upper body
         cv2.circle(img, (cx, cy), 5, [255, 0, 255], thickness=2)
@@ -108,45 +114,54 @@ while True:
         zVal = -int(zPID.update(area))
         wVal = xVal  # set left right control equal to CCW, CW control to improve tracking
 
+        if landmarks:
+            # Make id -> (x, y) dict
+            lm = {idx: (x, y) for idx, (x, y, _z) in enumerate(landmarks)}
+        else:
+            lm = {}
+
         # If gestures are found override tracking control
-        angArmL = detector.findAngle(img, 13, 11, 23, draw=False)
-        angArmR = detector.findAngle(img, 14, 12, 24, draw=False)
-        angElbowL = detector.findAngle(img, 11, 13, 15, draw=False)
-        angElbowR = detector.findAngle(img, 12, 14, 16, draw=False)
-        # wristDistance, img, _ = findDistance(lmList, 15, 16, img)
-        # wristShoulderDistance1, img, _ = findDistance(lmList, 12, 16, img)
-        # wristShoulderDistance2, img, _ = findDistance(lmList, 11, 15, img)
+        if all(i in lm for i in (11,12,13,14,15,16,23,24)):
+            angArmL, img   = detector.findAngle(lm[13], lm[11], lm[23], img)
+            angArmR, img   = detector.findAngle(lm[14], lm[12], lm[24], img)
+            angElbowL, img = detector.findAngle(lm[11], lm[13], lm[15], img)
+            angElbowR, img = detector.findAngle(lm[12], lm[14], lm[16], img)
+        
+            # wristDistance, img, _ = findDistance(landmarks, 15, 16, img)
+            # wristShoulderDistance1, img, _ = findDistance(landmarks, 12, 16, img)
+            # wristShoulderDistance2, img, _ = findDistance(landmarks, 11, 15, img)
 
-        # check for  photo request
-        if ((angArmL > 70 and angArmL < 110) and (angArmR > 250 and angArmR < 290)) or takingPhoto:
-            gesture = "Take Photo"
-            takePhoto(imgOrig, xVal, yVal, zVal)
+            # check for  photo request
+            if ((angArmL > 80 and angArmL < 100) and (angArmR > 260 and angArmR < 280)) or takingPhoto:
+                gesture = "Take Photo"
+                takePhoto(imgOrig, xVal, yVal, zVal)
 
-        # track body
-        if angArmL > 75 and angArmL < 105:
-            if angElbowL < 105:
-                gesture = 'Down'
-                yVal = -33
-                # yPID.targetVal = np.clip(yPID.targetVal - (hi // 100), 50, hi-50)  # decrease PID target 1%
-            else:
-                gesture = 'Left'
-                wVal = 33 # move left
-        if angArmR > 255 and angArmR < 285:
-            if angElbowR > 255:
-                gesture = 'Down'
-                yVal = -33
-                # yPID.targetVal = np.clip(yPID.targetVal - (hi // 100), 50, hi-50)  # decrease PID target 1%
-            else:
-                gesture = 'Right'
-                wVal = -33 # move right
-        if (angArmR > 180 and angArmR < 200) or (angArmL > 160 and angArmL < 180):
-            gesture = 'Up'
-            yVal = 33
-            #yPID.targetVal = np.clip(yPID.targetVal + (hi//100), 50, hi-50) # increase PID target 1%
-        # if wristDistance < 50 and (wristShoulderDistance1 < 50 and wristShoulderDistance2 < 50):
-        #     gesture = "Cross"
-        #     drone.land();
-        #     isFlying = False
+            # track body
+            if angArmL > 80 and angArmL < 100:
+                if angElbowL < 100:
+                    gesture = 'Down'
+                    yVal = -33
+                    # yPID.targetVal = np.clip(yPID.targetVal - (hi // 100), 50, hi-50)  # decrease PID target 1%
+                else:
+                    gesture = 'Left'
+                    wVal = 33 # move left
+            if angArmR > 260 and angArmR < 280:
+                if angElbowR > 260:
+                    gesture = 'Down'
+                    yVal = -33
+                    # yPID.targetVal = np.clip(yPID.targetVal - (hi // 100), 50, hi-50)  # decrease PID target 1%
+                else:
+                    gesture = 'Right'
+                    wVal = -33 # move right
+            if (angArmR > 180 and angArmR < 200) or (angArmL > 160 and angArmL < 180):
+                gesture = 'Up'
+                yVal = 33
+                #yPID.targetVal = np.clip(yPID.targetVal + (hi//100), 50, hi-50) # increase PID target 1%
+            
+            # if wristDistance < 50 and (wristShoulderDistance1 < 50 and wristShoulderDistance2 < 50):
+            #     gesture = "Cross"
+            #     #drone.land();
+            #     isFlying = False
     else:
         # no body was found so zero out errors (forces stoppage of movement)
         xVal = 0
@@ -178,7 +193,6 @@ while True:
         drone.takeoff()
         isFlying = True
 
-isFlying = False
 print(drone.get_battery())
 cv2.destroyAllWindows()
 print(drone.get_battery())
