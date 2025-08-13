@@ -1,0 +1,1 @@
+print("Hello, students! Your environment is ready.")

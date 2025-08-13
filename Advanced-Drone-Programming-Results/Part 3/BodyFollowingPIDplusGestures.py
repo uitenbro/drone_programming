@@ -42,14 +42,14 @@ drone.streamoff()
 drone.streamon()
 
 
-# webcam = cv2.VideoCapture(0)
-# _, img = webcam.read()
-# img = cv2.resize(img, (wi, hi))
+webcam = cv2.VideoCapture(0)
+_, img = webcam.read()
+img = cv2.resize(img, (wi, hi))
 
 while True:
     # get image
-    img = drone.get_frame_read().frame
-    #_, img = webcam.read()
+    # img = drone.get_frame_read().frame
+    _, img = webcam.read()
     # resize then find face and draw bbox
     img = cv2.resize(img, (wi, hi))
     img = detector.findPose(img, draw=True)
