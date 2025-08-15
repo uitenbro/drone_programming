@@ -6,3 +6,9 @@ https://docs.google.com/document/d/1YG3C8AZE8rWQXv7bQWbBuhpH_QySADXXRs2cLoKBIrQ/
 Original Course:
 https://www.pyimagesearch.com/autonomous-drones-with-computer-vision-and-opencv/
 https://pyimagesearch.mykajabi.com/library
+
+Create a python virtual env and activate it then install packages in requirements.txt
+python3 -m venv drone
+source drone/bin/activate
+pip install –upgrade pip
+pip install -r requirements.txt
