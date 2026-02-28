@@ -10,6 +10,9 @@ from datetime import datetime
 import time
 import math
 
+# set this to true to use the Tello drone, false to use webcam
+TELLO = False
+
 def takePhoto(img, xVal, yVal, zVal):
     global takingPhoto
     global pauseTime
@@ -46,19 +49,19 @@ def findDistance(lmList, p1, p2, img, draw=True, r=15, t=3):
 
     return length, img, [x1, y1, x2, y2, cx, cy]
 
-drone = tello.Tello()
-# drone.connect()
-# print(drone.get_battery())
-# drone.streamoff()
-# drone.streamon()
+if TELLO:
+    drone = tello.Tello()
+    drone.connect()
+    print(drone.get_battery())
+    drone.streamoff()
+    drone.streamon()
+else:   
+    webcam = cv2.VideoCapture(0)
+    # _, img = webcam.read()
+    # img = cv2.resize(img, (wi, hi))
 
 hi, wi = 480, 640
-
 detector = PoseDetector()
-
-webcam = cv2.VideoCapture(0)
-_, img = webcam.read()
-img = cv2.resize(img, (wi, hi))
 
 isFlying = False
 takingPhoto = False
@@ -76,9 +79,12 @@ plotY = LivePlot(yLimit=[-100, 100], char='Y')
 plotZ = LivePlot(yLimit=[-100, 100], char='Z')
 
 while True:
-    # get image
-    #img = drone.get_frame_read().frame
-    _, img = webcam.read()
+    if TELLO:
+        # get image drone camera
+        img = drone.get_frame_read().frame
+    else:
+        # get image webcam
+        _, img = webcam.read()
 
     # save original image
     imgOrig = img
@@ -182,18 +188,21 @@ while True:
     #cv2.imshow("drone view", img)
     cv2.imshow("drone view", imgStacked)
 
-    # if isFlying:
-    #     # command the drone to move
-    #     drone.send_rc_control(wVal, zVal, yVal, xVal)
+    if TELLO:
+        if isFlying:
+            # command the drone to move
+            drone.send_rc_control(wVal, zVal, yVal, xVal)
 
     key = cv2.waitKey(5)
     if key & 0xFF == ord('q'):
         break
     elif key & 0xFF == ord('t'):
-        drone.takeoff()
-        isFlying = True
+        if TELLO:
+            if not isFlying:
+                drone.takeoff()
+                isFlying = True
 
-# print(drone.get_battery())
 cv2.destroyAllWindows()
-# print(drone.get_battery())
-# drone.end()
+if TELLO:
+    print(drone.get_battery())
+    drone.end()
