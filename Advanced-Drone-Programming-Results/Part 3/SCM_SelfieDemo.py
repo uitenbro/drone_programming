@@ -78,6 +78,9 @@ plotX = LivePlot(yLimit=[-100, 100], char='X')
 plotY = LivePlot(yLimit=[-100, 100], char='Y')
 plotZ = LivePlot(yLimit=[-100, 100], char='Z')
 
+print("\n=========================================\n" \
+      "Press 't' to takeoff and 'q' to land/quit" \
+      "\n=========================================\n")
 while True:
     if TELLO:
         # get image drone camera
