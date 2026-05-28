@@ -11,7 +11,7 @@ cd <repo-folder>
 ### 2. Create Virtual Environment in VS Code
 - Open the folder in VS Code.
 - Press `Ctrl/Cmd+Shift+P` → **Python: Create Environment**
-- Choose **Venv**, then pick your Python version.
+- Choose **Venv**, then pick your Python version (3.11).
 - VS Code will detect `requirements.txt` and ask to install dependencies — choose **Yes**.
 
 ### 3. Verify Environment Activation
